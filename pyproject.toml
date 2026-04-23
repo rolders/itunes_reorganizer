@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "itunes-reorganizer"
+version = "0.1.0"
+description = "Reorganize a legacy iTunes music folder into an album-based structure using embedded metadata."
+requires-python = ">=3.10"
+dependencies = [
+    "mutagen>=1.47",
+    "rich>=13.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+    "pytest-cov>=4.0",
+]
+
+[project.scripts]
+itunes-reorganizer = "itunes_reorganizer.main:main"
+itunes-reorganizer-setup = "itunes_reorganizer.setup:main"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
