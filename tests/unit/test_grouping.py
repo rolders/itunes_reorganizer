@@ -48,11 +48,12 @@ class TestValidateTrack:
         track = _make_track(tracknumber=None)
         assert validate_track(track, config, log) is False
 
-    def test_missing_albumartist_no_fallback(self, tmp_path):
+    def test_missing_albumartist_is_now_accepted(self, tmp_path):
+        """Albumartist is no longer required — resolved at group level."""
         config = Config(source_root=tmp_path, destination_root=tmp_path / "dest", fallback_to_artist=False)
         log = ErrorLog()
         track = _make_track(albumartist=None)
-        assert validate_track(track, config, log) is False
+        assert validate_track(track, config, log) is True
 
     def test_missing_albumartist_with_fallback_and_artist(self, tmp_path):
         config = Config(source_root=tmp_path, destination_root=tmp_path / "dest", fallback_to_artist=True)
@@ -60,11 +61,12 @@ class TestValidateTrack:
         track = _make_track(albumartist=None, artist="Fallback Artist")
         assert validate_track(track, config, log) is True
 
-    def test_missing_albumartist_with_fallback_no_artist(self, tmp_path):
+    def test_missing_albumartist_and_artist_is_now_accepted(self, tmp_path):
+        """Even with no artist info at all, track passes validation (grouped later)."""
         config = Config(source_root=tmp_path, destination_root=tmp_path / "dest", fallback_to_artist=True)
         log = ErrorLog()
         track = _make_track(albumartist=None, artist=None)
-        assert validate_track(track, config, log) is False
+        assert validate_track(track, config, log) is True
 
 
 class TestGroupTracks:
@@ -189,6 +191,36 @@ class TestGroupTracks:
         assert len(result.groups) == 1
         group = list(result.groups.values())[0]
         assert group.album_artist == "Aimee Mann"
+
+    def test_hangable_auto_bulb_ep2_different_artists_one_without_albumartist(self, tmp_path):
+        """Hangable Auto Bulb EP.2: AFX track (no albumartist) + Aphex Twin track (with albumartist).
+        Both should pass validation and be grouped together."""
+        config = Config(source_root=tmp_path, destination_root=tmp_path / "dest")
+        log = ErrorLog()
+        tracks = [
+            _make_track(
+                album="Hangable Auto Bulb EP.2",
+                artist="AFX",
+                albumartist=None,  # Missing albumartist — was previously skipped
+                title="Every Day",
+                tracknumber=1,
+                year="1995",
+            ),
+            _make_track(
+                album="Hangable Auto Bulb EP.2",
+                artist="AFX",
+                albumartist="Aphex Twin",
+                title="Arched Maid Via RDJ",
+                tracknumber=2,
+                year="1995",
+            ),
+        ]
+        result = group_tracks(tracks, config, log)
+        assert len(result.skipped) == 0
+        assert len(result.groups) == 1
+        group = list(result.groups.values())[0]
+        assert len(group.tracks) == 2
+        assert group.album_artist == "Aphex Twin"
 
     def test_same_album_name_different_artists_stays_separate(self, tmp_path):
         """Two different albums with the same name but different years should stay separate."""

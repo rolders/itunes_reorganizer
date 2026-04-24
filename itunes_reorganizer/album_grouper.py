@@ -26,13 +26,11 @@ def validate_track(meta: TrackMetadata, config: Config, error_log: ErrorLog) -> 
     if meta.tracknumber is None:
         missing.append("tracknumber")
 
-    effective_artist = meta.effective_albumartist
-    if config.fallback_to_artist and not effective_artist:
-        if not meta.artist:
-            missing.append("albumartist/artist")
-    elif not config.fallback_to_artist and not effective_artist:
-        if not meta.albumartist:
-            missing.append("albumartist")
+    # Note: albumartist/artist is NOT required for validation.
+    # The album artist is resolved at the group level in _resolve_group_artist(),
+    # so individual tracks are accepted even without albumartist.
+    # This correctly handles cases like soundtracks or EPs where some tracks
+    # have albumartist set and others don't.
 
     if missing:
         error_log.add_skip(
