@@ -134,3 +134,69 @@ class TestGroupTracks:
         assert len(result.groups) == 1
         group = list(result.groups.values())[0]
         assert group.album_artist == "Solo Artist"
+
+    def test_soundtrack_grouped_together(self, tmp_path):
+        """Soundtracks have per-track artists — should be grouped as one album under VA."""
+        config = Config(source_root=tmp_path, destination_root=tmp_path / "dest")
+        log = ErrorLog()
+        tracks = [
+            _make_track(
+                album="Magnolia",
+                artist="Aimee Mann",
+                albumartist="Aimee Mann",
+                title="Wise Up",
+                tracknumber=8,
+                year="1999",
+            ),
+            _make_track(
+                album="Magnolia",
+                artist="Supertramp",
+                albumartist="Supertramp",
+                title="Logical Song",
+                tracknumber=1,
+                year="1999",
+            ),
+            _make_track(
+                album="Magnolia",
+                artist="Jon Brion",
+                albumartist="Jon Brion",
+                title="Here We Go",
+                tracknumber=3,
+                year="1999",
+            ),
+        ]
+        result = group_tracks(tracks, config, log)
+        assert len(result.groups) == 1
+        group = list(result.groups.values())[0]
+        assert group.album_artist == "Various Artists"
+        assert len(group.tracks) == 3
+
+    def test_soundtrack_single_artist_stays_solo(self, tmp_path):
+        """If only one artist's tracks are present, it should stay under that artist."""
+        config = Config(source_root=tmp_path, destination_root=tmp_path / "dest")
+        log = ErrorLog()
+        tracks = [
+            _make_track(
+                album="Magnolia",
+                artist="Aimee Mann",
+                albumartist="Aimee Mann",
+                title="Wise Up",
+                tracknumber=8,
+                year="1999",
+            ),
+        ]
+        result = group_tracks(tracks, config, log)
+        assert len(result.groups) == 1
+        group = list(result.groups.values())[0]
+        assert group.album_artist == "Aimee Mann"
+
+    def test_same_album_name_different_artists_stays_separate(self, tmp_path):
+        """Two different albums with the same name but different years should stay separate."""
+        config = Config(source_root=tmp_path, destination_root=tmp_path / "dest")
+        log = ErrorLog()
+        tracks = [
+            _make_track(album="Greatest Hits", artist="Artist A", albumartist="Artist A", year="2000", tracknumber=1),
+            _make_track(album="Greatest Hits", artist="Artist B", albumartist="Artist B", year="2010", tracknumber=1),
+        ]
+        result = group_tracks(tracks, config, log)
+        assert len(result.groups) == 2
