@@ -9,7 +9,7 @@ from typing import Optional
 
 from .config import Config
 from .errors import ErrorLog, Severity
-from .planner import FilePlan, PlanResult
+from .models import FilePlan, PlanResult
 from .progress import ProgressReporter, SilentReporter
 
 
@@ -110,34 +110,38 @@ def generate_dry_run_report(plans: PlanResult, config: Config) -> str:
     lines: list[str] = []
 
     lines.append("=" * 80)
-    lines.append("DRY-RUN REORGANIZATION PLAN")
+    lines.append("DRY-RUN REORGANIZATION PLAN (V2)")
     lines.append("=" * 80)
     lines.append(f"Source:      {config.source_root}")
     lines.append(f"Destination: {config.destination_root}")
     lines.append(f"Operation:   {config.operation}")
+    lines.append(f"MusicBrainz: {'enabled' if config.enable_musicbrainz else 'disabled'}")
     lines.append("")
 
     if not plans.plans:
         lines.append("No files to process.")
         return "\n".join(lines)
 
-    # Group plans by destination folder for readability
-    by_folder: dict[str, list[FilePlan]] = {}
-    for plan in plans.plans:
-        folder = str(plan.destination.parent)
-        if folder not in by_folder:
-            by_folder[folder] = []
-        by_folder[folder].append(plan)
+    # Group plans by album plan
+    for album_plan in plans.album_plans:
+        group = album_plan.group
+        route = album_plan.route.value
+        lines.append(f"\n{'─' * 60}")
+        lines.append(f"  [{route}] {group.album_artist} — {group.album}")
+        lines.append(f"  Type: {album_plan.release_type.value} | Tracks: {len(group.tracks)}")
+        if group.year:
+            lines.append(f"  Year: {group.year}")
+        if group.label:
+            lines.append(f"  Label: {group.label}")
+        if group.catalog_number:
+            lines.append(f"  Catalog#: {group.catalog_number}")
+        lines.append(f"  → {album_plan.destination_dir}")
+        lines.append("")
 
-    # Files to be moved/copied
-    lines.append(f"FILES TO {config.operation.upper()} ({len(plans.plans)} total)")
-    lines.append("-" * 80)
-    for folder in sorted(by_folder.keys()):
-        lines.append(f"\n  {folder}/")
-        for plan in sorted(by_folder[folder], key=lambda p: p.tracknumber):
-            rel_source = plan.source.relative_to(config.source_root) if plan.source.is_relative_to(config.source_root) else plan.source
+        for fp in album_plan.file_plans:
+            rel_source = fp.source.relative_to(config.source_root) if fp.source.is_relative_to(config.source_root) else fp.source
             lines.append(f"    {rel_source}")
-            lines.append(f"      → {plan.destination.name}")
+            lines.append(f"      → {fp.destination.name}")
 
     # Collisions
     if plans.collisions:
@@ -148,8 +152,15 @@ def generate_dry_run_report(plans: PlanResult, config: Config) -> str:
             lines.append(f"    → {plan.destination}  (renamed due to collision)")
 
     # Summary
+    route_counts = {}
+    for ap in plans.album_plans:
+        route_counts[ap.route.value] = route_counts.get(ap.route.value, 0) + 1
+
     lines.append(f"\n\nSUMMARY")
     lines.append("-" * 80)
+    lines.append(f"  Total albums:  {len(plans.album_plans)}")
+    for route_name, count in sorted(route_counts.items()):
+        lines.append(f"    {route_name}: {count}")
     lines.append(f"  Total files:   {len(plans.plans)}")
     lines.append(f"  Collisions:    {len(plans.collisions)}")
     lines.append(f"\n  No changes were made to the filesystem.")

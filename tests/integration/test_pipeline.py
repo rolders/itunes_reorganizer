@@ -9,7 +9,7 @@ import pytest
 from itunes_reorganizer.config import Config
 from itunes_reorganizer.errors import ErrorLog
 from itunes_reorganizer.executor import execute_plans, generate_dry_run_report
-from itunes_reorganizer.grouping import group_tracks
+from itunes_reorganizer.album_grouper import group_tracks
 from itunes_reorganizer.metadata import TrackMetadata
 from itunes_reorganizer.planner import build_plans
 from itunes_reorganizer.scanner import scan_audio_files

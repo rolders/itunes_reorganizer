@@ -11,6 +11,13 @@ from typing import Optional
 from .errors import ErrorLog, Severity
 
 
+DEFAULT_DANCE_GENRES = [
+    "electronic", "techno", "house", "trance", "dnb", "ambient",
+    "drum and bass", "drum & bass", "dubstep", "breakbeat",
+    "deep house", "tech house", "progressive house",
+]
+
+
 @dataclass
 class Config:
     source_root: Path
@@ -18,6 +25,10 @@ class Config:
     dry_run: bool = True
     operation: str = "copy"  # "copy" or "move"
     fallback_to_artist: bool = False
+    # V2 options
+    enable_musicbrainz: bool = False
+    enable_label_routing: bool = True
+    dance_genres: list[str] = field(default_factory=lambda: list(DEFAULT_DANCE_GENRES))
 
     @classmethod
     def from_dict(cls, data: dict) -> Config:
@@ -27,6 +38,9 @@ class Config:
             dry_run=data.get("dry_run", True),
             operation=data.get("operation", "copy"),
             fallback_to_artist=data.get("fallback_to_artist", False),
+            enable_musicbrainz=data.get("enable_musicbrainz", False),
+            enable_label_routing=data.get("enable_label_routing", True),
+            dance_genres=data.get("dance_genres", list(DEFAULT_DANCE_GENRES)),
         )
 
     @classmethod
@@ -45,6 +59,9 @@ class Config:
             "dry_run": self.dry_run,
             "operation": self.operation,
             "fallback_to_artist": self.fallback_to_artist,
+            "enable_musicbrainz": self.enable_musicbrainz,
+            "enable_label_routing": self.enable_label_routing,
+            "dance_genres": self.dance_genres,
         }
 
     def save(self, path: str | Path) -> None:
@@ -65,7 +82,6 @@ class Config:
             valid = False
 
         if self.dry_run:
-            # In dry-run mode, destination doesn't need to exist yet
             pass
         else:
             try:

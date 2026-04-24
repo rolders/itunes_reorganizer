@@ -6,7 +6,7 @@ import pytest
 
 from itunes_reorganizer.config import Config
 from itunes_reorganizer.errors import ErrorLog
-from itunes_reorganizer.grouping import group_tracks, validate_track
+from itunes_reorganizer.album_grouper import group_tracks, validate_track
 from itunes_reorganizer.metadata import TrackMetadata
 
 

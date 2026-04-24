@@ -1,36 +1,27 @@
-"""Grouping: organise validated tracks into album groups."""
+"""Album grouper: group tracks by (album_artist_resolved, album_normalized)."""
 
 from __future__ import annotations
 
-from collections import defaultdict
-from dataclasses import dataclass, field
-from pathlib import Path
 from typing import Optional
 
 from .config import Config
 from .errors import ErrorLog
 from .metadata import TrackMetadata
+from .models import AlbumGroup, GroupingResult
 
 
-@dataclass
-class AlbumGroup:
-    """A group of tracks belonging to the same album."""
-    album_artist: str
-    album: str
-    year: Optional[str] = None
-    tracks: list[TrackMetadata] = field(default_factory=list)
-
-    @property
-    def sort_key(self) -> str:
-        year_str = self.year or "0000"
-        return f"{self.album_artist}::{year_str}::{self.album}".lower()
-
-
-@dataclass
-class GroupingResult:
-    """Result of the grouping step."""
-    groups: dict[str, AlbumGroup] = field(default_factory=dict)
-    skipped: list[TrackMetadata] = field(default_factory=list)
+def _album_artist_resolved(meta: TrackMetadata, config: Config) -> str:
+    """
+    Resolve album artist per spec:
+    IF album_artist exists → use it
+    ELIF multiple artists → "Various Artists"
+    ELSE → artist
+    """
+    if meta.albumartist:
+        return meta.albumartist
+    if not meta.artist:
+        return "Unknown Artist"
+    return meta.artist
 
 
 def _album_key(artist: str, album: str, year: Optional[str]) -> str:
@@ -51,10 +42,7 @@ def validate_track(meta: TrackMetadata, config: Config, error_log: ErrorLog) -> 
 
     effective_artist = meta.effective_albumartist
     if config.fallback_to_artist and not effective_artist:
-        if meta.artist:
-            # Fall back to track artist
-            pass
-        else:
+        if not meta.artist:
             missing.append("albumartist/artist")
     elif not config.fallback_to_artist and not effective_artist:
         if not meta.albumartist:
@@ -71,14 +59,10 @@ def validate_track(meta: TrackMetadata, config: Config, error_log: ErrorLog) -> 
     return True
 
 
-def _effective_artist(meta: TrackMetadata, config: Config) -> str:
-    """Determine the effective artist for folder naming."""
-    effective = meta.effective_albumartist
-    if effective:
-        return effective
-    if config.fallback_to_artist and meta.artist:
-        return meta.artist
-    return "Unknown Artist"
+def _detect_compilation(tracks: list[TrackMetadata]) -> bool:
+    """Check if a group of tracks represents a compilation."""
+    artists = {t.artist for t in tracks if t.artist}
+    return len(artists) > 1
 
 
 def group_tracks(
@@ -97,7 +81,7 @@ def group_tracks(
             result.skipped.append(meta)
             continue
 
-        artist = _effective_artist(meta, config)
+        artist = _album_artist_resolved(meta, config)
         album = meta.album or "Unknown Album"
         year = meta.year
 
@@ -111,5 +95,17 @@ def group_tracks(
             )
 
         result.groups[key].tracks.append(meta)
+
+    # Post-process: detect compilations from track-level hints
+    # and update album_artist to "Various Artists" if needed
+    for group in result.groups.values():
+        # Check if any track has compilation flag or albumartist = Various Artists
+        has_comp_flag = any(t.compilation for t in group.tracks)
+        has_va_albumartist = any(
+            t.albumartist and t.albumartist.lower() == "various artists"
+            for t in group.tracks
+        )
+        if has_comp_flag or has_va_albumartist:
+            group.album_artist = "Various Artists"
 
     return result

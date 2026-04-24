@@ -1,4 +1,4 @@
-"""Main entry point: load config and run the full reorganization pipeline."""
+"""Main entry point: load config and run the full reorganization pipeline (V2)."""
 
 from __future__ import annotations
 
@@ -10,12 +10,14 @@ from rich.console import Console
 from .config import Config
 from .errors import ErrorLog, Severity
 from .executor import execute_plans, generate_dry_run_report
-from .grouping import group_tracks
+from .album_grouper import group_tracks
 from .metadata import extract_metadata
+from .musicbrainz_client import MusicBrainzClient
 from .planner import build_plans
 from .progress import ProgressReporter, SilentReporter
 from .reporting import (
     RunStats,
+    write_album_groups_json,
     write_collisions_csv,
     write_dry_run_report,
     write_moved_csv,
@@ -49,10 +51,12 @@ def run(config_path: str) -> int:
             console.print(f"[red]Fatal:[/red] {err.reason}")
         return 2
 
-    console.print(f"\n[bold]iTunes Reorganizer[/bold]")
+    console.print(f"\n[bold]iTunes Reorganizer V2[/bold]")
     console.print(f"  Source:      {config.source_root}")
     console.print(f"  Destination: {config.destination_root}")
     console.print(f"  Mode:        {'DRY-RUN' if config.dry_run else config.operation.upper()}")
+    console.print(f"  MusicBrainz: {'enabled' if config.enable_musicbrainz else 'disabled'}")
+    console.print(f"  Label routing: {'enabled' if config.enable_label_routing else 'disabled'}")
     console.print()
 
     # --- Step 1: Scan ---
@@ -69,7 +73,7 @@ def run(config_path: str) -> int:
         console.print("[yellow]No audio files found. Nothing to do.[/yellow]")
         return 0
 
-    # --- Step 2 & 3: Extract metadata ---
+    # --- Step 2: Extract metadata ---
     console.print("[bold blue]Extracting metadata...[/bold blue]")
     tracks = []
 
@@ -85,7 +89,7 @@ def run(config_path: str) -> int:
     if files_skipped_metadata:
         console.print(f"  [yellow]Skipped {files_skipped_metadata} files (no/invalid metadata).[/yellow]")
 
-    # --- Step 4 & 5: Validate and group ---
+    # --- Step 3: Group into albums ---
     console.print("[bold blue]Grouping into albums...[/bold blue]")
     grouping_result = group_tracks(tracks, config, error_log)
 
@@ -95,20 +99,40 @@ def run(config_path: str) -> int:
     if grouping_result.skipped:
         console.print(f"  [yellow]Skipped {len(grouping_result.skipped)} tracks (missing required metadata).[/yellow]")
 
-    # --- Step 6: Plan ---
+    # --- Step 4: MusicBrainz enrichment (optional) ---
+    mb_client = None
+    if config.enable_musicbrainz:
+        console.print("[bold blue]MusicBrainz enrichment...[/bold blue]")
+        mb_client = MusicBrainzClient(cache_dir=config.destination_root / ".cache")
+        if mb_client.available:
+            with ProgressReporter(total=num_groups, description="MusicBrainz lookup") as progress:
+                for group in grouping_result.groups.values():
+                    progress.update(current_file=group.album)
+                    mb_client.enrich_group(group)
+            console.print("  MusicBrainz enrichment complete.")
+        else:
+            console.print("  [yellow]musicbrainzngs not installed — skipping enrichment.[/yellow]")
+
+    # --- Step 5: Build plans (classify → route → build paths) ---
     console.print("[bold blue]Planning operations...[/bold blue]")
     plan_result = build_plans(grouping_result, config, error_log)
     console.print(f"  Planned {len(plan_result.plans)} file operations.")
     if plan_result.collisions:
         console.print(f"  [yellow]{len(plan_result.collisions)} collisions detected (will be renamed).[/yellow]")
 
-    # --- Step 7: Execute or dry-run ---
+    # Print routing summary
+    route_counts = {}
+    for ap in plan_result.album_plans:
+        route_counts[ap.route.value] = route_counts.get(ap.route.value, 0) + 1
+    for route_name, count in sorted(route_counts.items()):
+        console.print(f"    {route_name}: {count} albums")
+
+    # --- Step 6: Execute or dry-run ---
     if config.dry_run:
         console.print("\n[bold green]DRY-RUN MODE — no changes made.[/bold green]")
         report_text = generate_dry_run_report(plan_result, config)
-        executed = plan_result.plans  # all "planned" but not executed
+        executed = plan_result.plans
 
-        # Write dry-run report
         report_path = write_dry_run_report(report_text, config.destination_root)
         console.print(f"\n  Dry-run report written to: {report_path}")
     else:
@@ -117,7 +141,7 @@ def run(config_path: str) -> int:
             executed = execute_plans(plan_result, config, error_log, progress)
         console.print(f"  Successfully processed {len(executed)} files.")
 
-    # --- Step 8: Report ---
+    # --- Step 7: Report ---
     stats = RunStats(
         total_files_scanned=len(audio_files),
         files_with_metadata=len(tracks),
@@ -137,12 +161,14 @@ def run(config_path: str) -> int:
     write_run_summary(stats, config.destination_root)
     write_moved_csv(executed, config.destination_root)
     write_skipped_csv(error_log, config.destination_root)
+    write_album_groups_json(grouping_result, config.destination_root)
     if plan_result.collisions:
         write_collisions_csv(plan_result.collisions, config.destination_root)
 
     # Print summary
     console.print(f"\n[bold]Summary[/bold]")
     console.print(f"  Scanned:  {stats.total_files_scanned}")
+    console.print(f"  Albums:   {num_groups}")
     console.print(f"  Planned:  {stats.files_planned}")
     console.print(f"  Executed: {stats.files_executed}")
     console.print(f"  Skipped:  {stats.files_skipped}")

@@ -6,9 +6,10 @@ import pytest
 
 from itunes_reorganizer.config import Config
 from itunes_reorganizer.errors import ErrorLog
-from itunes_reorganizer.grouping import group_tracks
+from itunes_reorganizer.album_grouper import group_tracks
 from itunes_reorganizer.metadata import TrackMetadata
-from itunes_reorganizer.planner import build_plans, _sanitize_name
+from itunes_reorganizer.planner import build_plans
+from itunes_reorganizer.naming import sanitize_name
 
 
 def _make_track(**overrides) -> TrackMetadata:
@@ -26,22 +27,22 @@ def _make_track(**overrides) -> TrackMetadata:
 
 class TestSanitizeName:
     def test_normal(self):
-        assert _sanitize_name("Hello World") == "Hello World"
+        assert sanitize_name("Hello World") == "Hello World"
 
     def test_invalid_chars(self):
-        assert _sanitize_name('Hello: World/ <test>') == "Hello World test"
+        assert sanitize_name('Hello: World/ <test>') == "Hello World test"
 
     def test_multiple_spaces(self):
-        assert _sanitize_name("Hello   World") == "Hello World"
+        assert sanitize_name("Hello   World") == "Hello World"
 
     def test_leading_dots(self):
-        assert _sanitize_name("..hidden") == "hidden"
+        assert sanitize_name("..hidden") == "hidden"
 
     def test_empty(self):
-        assert _sanitize_name("") == "Unknown"
+        assert sanitize_name("") == "Unknown"
 
     def test_only_invalid(self):
-        assert _sanitize_name(":::") == "Unknown"
+        assert sanitize_name(":::") == "Unknown"
 
 
 class TestBuildPlans:
@@ -55,7 +56,7 @@ class TestBuildPlans:
         assert len(result.plans) == 1
         plan = result.plans[0]
         assert plan.album_artist == "Test Artist"
-        assert "2023 - Test Album" in str(plan.destination)
+        assert "Test Album [2023]" in str(plan.destination)
         assert plan.destination.name.startswith("01")
 
     def test_album_folder_with_year(self, tmp_path):
@@ -66,7 +67,7 @@ class TestBuildPlans:
         result = build_plans(grouping, config, log)
 
         dest = result.plans[0].destination
-        assert "1999 - Test Album" in str(dest)
+        assert "Test Album [1999]" in str(dest)
 
     def test_album_folder_without_year(self, tmp_path):
         config = Config(source_root=tmp_path, destination_root=tmp_path / "dest")

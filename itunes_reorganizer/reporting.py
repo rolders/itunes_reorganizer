@@ -10,9 +10,7 @@ from pathlib import Path
 from typing import Optional
 
 from .errors import ErrorLog, OrganizerError
-from .executor import FilePlan
-from .grouping import GroupingResult
-from .planner import PlanResult
+from .models import FilePlan, GroupingResult
 
 
 @dataclass
@@ -112,7 +110,6 @@ def write_collisions_csv(collisions: list[FilePlan], dest_root: Path) -> Path:
         writer = csv.writer(f)
         writer.writerow(["source", "original_dest_pattern", "resolved_dest", "track_number", "title"])
         for plan in collisions:
-            # Reconstruct what the "original" dest would have been (without suffix)
             writer.writerow([
                 str(plan.source),
                 str(plan.destination.parent / f"{plan.tracknumber:02d} - {plan.title}{plan.extension}"),
@@ -120,6 +117,40 @@ def write_collisions_csv(collisions: list[FilePlan], dest_root: Path) -> Path:
                 plan.tracknumber,
                 plan.title,
             ])
+    return path
+
+
+def write_album_groups_json(grouping_result: GroupingResult, dest_root: Path) -> Path:
+    """Write album_groups.json with album grouping details."""
+    path = dest_root / "album_groups.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+
+    groups_data = []
+    for key, group in sorted(grouping_result.groups.items()):
+        group_dict = {
+            "album_artist": group.album_artist,
+            "album": group.album,
+            "year": group.year,
+            "label": group.label,
+            "catalog_number": group.catalog_number,
+            "release_type": group.release_type.value,
+            "is_compilation": group.is_compilation,
+            "track_count": len(group.tracks),
+            "tracks": [
+                {
+                    "title": t.title,
+                    "artist": t.artist,
+                    "tracknumber": t.tracknumber,
+                    "source": str(t.source_path),
+                }
+                for t in sorted(group.tracks, key=lambda t: t.tracknumber or 0)
+            ],
+        }
+        groups_data.append(group_dict)
+
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(groups_data, f, indent=2)
+        f.write("\n")
     return path
 
 
