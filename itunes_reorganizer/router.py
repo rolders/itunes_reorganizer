@@ -46,7 +46,7 @@ def _has_dance_genre(group: AlbumGroup, config: Config) -> bool:
     dance_genres = {g.lower() for g in dance_genres}
 
     for track in group.tracks:
-        if hasattr(track, 'genre') and track.genre:
+        if track.genre:
             track_genres = {g.strip().lower() for g in track.genre.split(",")}
             if track_genres & dance_genres:
                 return True

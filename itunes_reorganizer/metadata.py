@@ -50,6 +50,7 @@ class TrackMetadata:
     discnumber: Optional[int] = None
     disctotal: Optional[int] = None
     year: Optional[str] = None
+    genre: Optional[str] = None
     compilation: bool = False
     format: str = ""  # e.g. "mp3", "flac"
 
@@ -115,6 +116,7 @@ def _extract_from_id3(audio: mutagen.File) -> dict:
         "albumartist": ("TPE2",),
         "artist": ("TPE1",),
         "year": ("TDRC", "TYER", "TDAT"),
+        "genre": ("TCON",),
         "compilation": ("TCMP",),
     }
 
@@ -151,6 +153,7 @@ def _extract_from_mp4(audio: MP4) -> dict:
         "artist": ("\xa9ART",),
         "year": ("\xa9day",),
         "tracknumber": ("trkn",),
+        "genre": ("\xa9gen",),
         "compilation": ("cpil",),
     }
 
@@ -188,6 +191,7 @@ def _extract_from_vorbis(audio) -> dict:
         "artist": ("artist",),
         "year": ("date",),
         "tracknumber": ("tracknumber",),
+        "genre": ("genre",),
         "compilation": ("compilation",),
     }
 
@@ -219,6 +223,7 @@ def _extract_from_ape(audio) -> dict:
         "artist": ("Artist",),
         "year": ("Year", "Date", "Recording Date"),
         "tracknumber": ("Track", "Track Number"),
+        "genre": ("Genre",),
         "compilation": ("Compilation",),
     }
 
@@ -312,6 +317,7 @@ def extract_metadata(file_path: Path, error_log: ErrorLog) -> Optional[TrackMeta
         artist=_clean_str(raw.get("artist")),
         tracknumber=tracknumber,
         year=year,
+        genre=_clean_str(raw.get("genre")),
         compilation=is_compilation,
         format=fmt,
     )

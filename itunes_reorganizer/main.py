@@ -106,8 +106,8 @@ def run(config_path: str) -> int:
         mb_client = MusicBrainzClient(cache_dir=config.destination_root / ".cache")
         if mb_client.available:
             with ProgressReporter(total=num_groups, description="MusicBrainz lookup") as progress:
-                for group in grouping_result.groups.values():
-                    progress.update(current_file=group.album)
+                for idx, group in enumerate(grouping_result.groups.values(), 1):
+                    progress.update(current_file=f"{idx}/{num_groups} {group.album}")
                     mb_client.enrich_group(group)
             console.print("  MusicBrainz enrichment complete.")
         else:
@@ -183,7 +183,7 @@ def run(config_path: str) -> int:
 
 def main():
     if len(sys.argv) != 2:
-        print(f"Usage: python -m itunes_reorganizer.main <config.json>", file=sys.stderr)
+        print(f"Usage: python -m itunes_reorganizer <config.json>", file=sys.stderr)
         sys.exit(2)
 
     exit_code = run(sys.argv[1])
